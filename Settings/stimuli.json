@@ -1,0 +1,38 @@
+{
+	"rodStim": {
+		"stimType": "Line",
+		"settings": {
+			"start": [
+				0,
+				-200
+			],
+			"end": [
+				0,
+				200
+			],
+			"lineWidth": 6,
+			"lineColor": [
+				-0.4,
+				-0.4,
+				-0.4
+			]
+		}
+	},
+	"startText": {
+		"stimType": "TextStim",
+		"settings": {
+			"text": "press SPACE to start trial",
+			"height": 40.0,
+			"pos": [
+				0,
+				0
+			],
+			"color": [
+				-1.0,
+				-1.0,
+				-0.6
+			],
+			"units": "pix"
+		}
+	}
+}
