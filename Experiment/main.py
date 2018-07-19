@@ -90,13 +90,12 @@ class WaveExp:
         given frequency.
         :return: gvs_wave, line_angle
         """
-        # TODO: make visual correctly anti-phase of gvs
         gvs_time = np.arange(0, self.duration_s,
                              1.0 / self.f_sampling)
         gvs_wave = self.current_mA * np.sin(2 * np.pi * frequency * gvs_time)
         visual_time = np.arange(0, self.duration_s,
                                 1.0 / self.screen_refresh_freq)
-        visual_wave = line_amplitude * np.cos(2 * np.pi * frequency * visual_time)
+        visual_wave = line_amplitude * -np.sin(2 * np.pi * frequency * visual_time)
         return gvs_wave, visual_wave
 
     def check_response(self):
