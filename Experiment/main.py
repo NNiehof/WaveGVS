@@ -5,6 +5,7 @@ from collections import OrderedDict
 import numpy as np
 from psychopy import visual, core, event
 from Experiment.GVS import GVS
+from Experiment.arduino import ArduinoConnect
 
 """
 Present sinusoidal GVS with a visual line oscillating around the
@@ -22,11 +23,10 @@ class WaveExp:
         self.f_sampling = 1e3
         self.screen_refresh_freq = 60
         self.n_trials = 2
-        self.duration_s = 100.0
+        self.duration_s = 10.0
         self.current_mA = 1.0
-        self.stochastic_gvs = False
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 1.0
+        self.line_amplitude_step_size = 0.5
 
         # TODO: generate trial list
         # frequency, amplitude
@@ -39,6 +39,7 @@ class WaveExp:
         self.stimuli = None
         self.triggers = None
         self.gvs_wave = None
+        self.gvs_sent = None
         self.visual_wave = None
         self.line_amplitude = 1.0
         self.stop_trial = False
@@ -54,6 +55,10 @@ class WaveExp:
 
         # set up connection with galvanic stimulator
         self._gvs_setup()
+
+        # connect to Arduino for retrieving GVS signals sent to the stimulator
+        self.gvs_sent = ArduinoConnect(device_name="Arduino", baudrate=9600)
+        self.gvs_sent.connect()
 
         # create stimuli
         self.make_stim = Stimuli(self.win, self.settings_dir, self.n_trials)
@@ -118,57 +123,85 @@ class WaveExp:
                 self.stimuli[stim].draw()
         self.win.flip()
 
+    def init_trial(self, trial):
+        """
+        Initialise trial
+        """
+        self.line_ori = []
+        self.frame_times = []
+        self.stop_trial = False
+        frequency = trial[0]
+        self.line_amplitude = trial[1]
+        self.gvs_wave, self.visual_wave = self.make_waves(
+            frequency, self.line_amplitude)
+
+    def show_visual(self):
+        """
+        Visual loop that draws the stimuli on screen
+        """
+        self.triggers["rodStim"] = True
+        line_start = time.time()
+
+        for frame in self.visual_wave:
+            self.stimuli["rodStim"].setOri(frame * self.line_amplitude)
+            self.line_ori.append(frame * self.line_amplitude)
+            self.display_stimuli()
+            self.frame_times.append(time.time())
+            self.check_response()
+            if self.stop_trial:
+                resp_time = time.time() - line_start
+                print("response time: {} s".format(resp_time))
+                break
+
+        self.triggers["rodStim"] = False
+        self.display_stimuli()
+
+    def wait_start(self):
+        """
+        Tell the participant to press the space bar to start the trial
+        """
+        self.triggers["startText"] = True
+        while True:
+            self.display_stimuli()
+            start_key = event.getKeys("space")
+            if "space" in start_key:
+                self.triggers["startText"] = False
+                self.display_stimuli()
+                break
+
     def run(self):
         """
         Run the experiment
         """
         for trial in self.trial_list:
-            self.stop_trial = False
-            frequency = trial[0]
-            self.line_amplitude = trial[1]
-            self.gvs_wave, self.visual_wave = self.make_waves(
-                frequency, self.line_amplitude)
+
+            self.init_trial(trial)
 
             # wait for space bar press to start trial
-            self.triggers["startText"] = True
-            while True:
-                self.display_stimuli()
-                start_key = event.getKeys("space")
-                if "space" in start_key:
-                    self.triggers["startText"] = False
-                    self.display_stimuli()
-                    break
+            self.wait_start()
 
             # send GVS signal
             if self.is_connected:
                 self.gvs.write_to_channel(self.gvs_wave,
                                           reset_to_zero_volts=True)
-            # else:
-                # self.stimulus_plot(self.gvs_wave)
-            self.triggers["rodStim"] = True
-            line_start = time.time()
 
             # draw visual line
-            for frame in self.visual_wave:
-                self.stimuli["rodStim"].ori = frame * self.line_amplitude
-                self.display_stimuli()
-                self.check_response()
-                if self.stop_trial:
-                    resp_time = time.time() - line_start
-                    print("response time: {} s".format(resp_time))
-                    break
-            self.triggers["rodStim"] = False
-            self.display_stimuli()
+            self.show_visual()
+            # self.stimulus_plot(self.line_ori, self.frame_times)
+            # self.quit_exp()
 
-    def stimulus_plot(self, stim, title=""):
+    def stimulus_plot(self, stim, xvals=None, title=""):
         """
         Plot generated stimulus, here for debugging purposes
         """
         import matplotlib.pyplot as plt
         plt.figure()
-        plt.plot(stim)
-        plt.xlabel("sample")
-        plt.ylabel("amplitude (mA)")
+        if xvals is not None:
+            plt.plot(xvals, stim)
+        else:
+            plt.plot(stim)
+        plt.xlabel("time")
+        plt.ylabel("amplitude")
         plt.title(title)
         plt.show()
 
