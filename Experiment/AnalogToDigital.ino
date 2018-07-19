@@ -1,0 +1,1 @@
+/*Analog to digital conversion*/void setup() {  // initialise with baudrate  Serial.begin(9600);}void loop() {  // read from analog pin 0  int analogValue = analogRead(A0);  // convert the analog value (0 - 1023) to a voltage (-5.0 - 5.0 V)  float voltage = 2.0 * (analogValue * (5.0 / 1023.0)) - 5.0;  // send voltage to serial port  Serial.write(voltage);}
