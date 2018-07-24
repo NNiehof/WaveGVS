@@ -25,6 +25,7 @@ class GVS(object):
         If undefined, log messages will be sent to the console.
         """
         self.max_voltage = abs(max_voltage)
+        self.connect_multiple_channels = False
 
         # create a task, initialise stream writer
         self.task = nidaqmx.Task()
@@ -53,21 +54,36 @@ class GVS(object):
         nidqamx.task.timing.cfg_samp_clk_timing.
         :return: True if connection was successful, otherwise False.
         """
+        # check for multiple channels
+        if isinstance(physical_channel_name, str):
+            self.connect_multiple_channels = False
+        elif isinstance(physical_channel_name, list):
+            self.connect_multiple_channels = True
+        else:
+             self.logger.error("GVS.connect: please specify a valid "
+                               "physical channel name.")
+
         try:
-            # create virtual output channel
-            self.task.ao_channels.add_ao_voltage_chan(
-                physical_channel_name,
-                name_to_assign_to_channel="GVSoutput",
-                min_val=-self.max_voltage,
-                max_val=self.max_voltage,
-                units=constants.VoltageUnits.VOLTS
-            )
-            # config timing
-            self.task.timing.cfg_samp_clk_timing(**timing_args)
-            # create output stream writer
-            self.writer = stream_writers.AnalogSingleChannelWriter(
-                self.task.out_stream, auto_start=True
-            )
+            if self.connect_multiple_channels:
+                # connect multiple analog output channels
+                for chan_name in physical_channel_name:
+                    self.add_ao_channel(chan_name)
+                # config timing
+                self.task.timing.cfg_samp_clk_timing(**timing_args)
+                # create output stream writer
+                self.writer = stream_writers.AnalogMultiChannelWriter(
+                    self.task.out_stream, auto_start=True
+                )
+            else:
+                # connect single analog output channel
+                self.add_ao_channel(physical_channel_name)
+                # config timing
+                self.task.timing.cfg_samp_clk_timing(**timing_args)
+                # create output stream writer
+                self.writer = stream_writers.AnalogSingleChannelWriter(
+                    self.task.out_stream, auto_start=True
+                )
+
             logging.info("GVS task and channel created")
         except nidaqmx.errors.DaqError as err:
             self.logger.error("DAQmx error: {0}".format(err))
@@ -86,6 +102,18 @@ class GVS(object):
             self._max_voltage = 3.0
         else:
             self._max_voltage = max_voltage
+
+    def add_ao_channel(self, physical_channel_name, assigned_name=""):
+        """
+        Create virtual voltage output channel
+        """
+        self.task.ao_channels.add_ao_voltage_chan(
+            physical_channel_name,
+            name_to_assign_to_channel=assigned_name,
+            min_val=-self.max_voltage,
+            max_val=self.max_voltage,
+            units=constants.VoltageUnits.VOLTS
+        )
 
     def write_to_channel(self, current_profile, reset_to_zero_volts=False):
         """
