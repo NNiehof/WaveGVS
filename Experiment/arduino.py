@@ -17,6 +17,7 @@ class ArduinoConnect:
         self.baudrate = baudrate
         self.cport = None
         self.serial_in = None
+        self.voltage = 0
 
     def connect(self):
         """
@@ -41,3 +42,11 @@ class ArduinoConnect:
         else:
             print("Warning: no signal from Arduino detected, check connection")
         return self.serial_in
+
+    def read_voltage(self):
+        """
+        Arduino send unsigned integer from 0 - 1023 which
+        must be translated to a voltage between -5 V and 5 V.
+        :return: voltage
+        """
+        return 2.0 * (self.serial_in.read() * (5.0 / 1023.0)) - 5.0
