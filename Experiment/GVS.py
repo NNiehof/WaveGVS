@@ -1,5 +1,6 @@
 # Nynke Niehof, 2018
 
+import numpy as np
 import nidaqmx
 from nidaqmx import constants, stream_writers
 import time
@@ -25,7 +26,8 @@ class GVS(object):
         If undefined, log messages will be sent to the console.
         """
         self.max_voltage = abs(max_voltage)
-        self.connect_multiple_channels = False
+        self.multiple_channels = False
+        self.n_channels = 0
 
         # create a task, initialise stream writer
         self.task = nidaqmx.Task()
@@ -44,9 +46,10 @@ class GVS(object):
         Establish connection with NIDAQ apparatus. A virtual output channel
         and data stream writer are created.
 
-        :param physical_channel_name: name of output port on NIDAQ (to see
-        available channel names, open NI MAX (software included with driver
-        installation) and look under "Devices and Interfaces").
+        :param physical_channel_name: (str or list of str) name of output
+        port on NIDAQ (to see available channel names, open NI MAX
+        (software included with driver installation) and look under
+        "Devices and Interfaces").
         The name might look something like "cDAQ1Mod1/ao0".
         :param sampling_rate: samples per second to generate per channel.
         Default is 10 kHz.
@@ -56,15 +59,17 @@ class GVS(object):
         """
         # check for multiple channels
         if isinstance(physical_channel_name, str):
-            self.connect_multiple_channels = False
+            self.multiple_channels = False
+            self.n_channels = 1
         elif isinstance(physical_channel_name, list):
-            self.connect_multiple_channels = True
+            self.multiple_channels = True
+            self.n_channels = len(physical_channel_name)
         else:
              self.logger.error("GVS.connect: please specify a valid "
                                "physical channel name.")
 
         try:
-            if self.connect_multiple_channels:
+            if self.multiple_channels:
                 # connect multiple analog output channels
                 for chan_name in physical_channel_name:
                     self.add_ao_channel(chan_name)
@@ -105,7 +110,13 @@ class GVS(object):
 
     def add_ao_channel(self, physical_channel_name, assigned_name=""):
         """
-        Create virtual voltage output channel
+        Create virtual voltage output channel.
+
+        :param physical_channel_name: name of output port on NIDAQ (to see
+        available channel names, open NI MAX (software included with driver
+        installation) and look under "Devices and Interfaces").
+        The name might look something like "cDAQ1Mod1/ao0".
+        :param assigned_name: (optional) name to assign to the channel.
         """
         self.task.ao_channels.add_ao_voltage_chan(
             physical_channel_name,
@@ -130,6 +141,11 @@ class GVS(object):
             # replace the final sample with zero to set the baseline back
             current_profile[-1] = 0.0
             self.logger.info("final current sample set to 0 V")
+
+        if self.multiple_channels:
+            assert(np.shape(current_profile)[0] == self.n_channels),\
+                "Number of rows in the data (numpy array) should equal" \
+                " the number of channels."
 
         t_start = time.time()
         samps_written = self.writer.write_many_sample(current_profile)

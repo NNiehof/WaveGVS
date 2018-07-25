@@ -25,7 +25,7 @@ class WaveExp:
         self.n_trials = 2
         self.duration_s = 10.0
         self.current_mA = 1.0
-        self.physical_channel_name = "cDAQ1Mod1/ao0"
+        self.physical_channel_name = ["cDAQ1Mod1/ao0", "cDAQ1Mod1/ao1"]
         self.line_amplitude_step_size = 0.5
 
         # TODO: generate trial list
@@ -78,7 +78,7 @@ class WaveExp:
         """
         Establish connection with galvanic stimulator
         """
-        buffer_size = int(self.duration_s * self.f_sampling)
+        buffer_size = int(self.duration_s * self.f_sampling) + 1
         timing = {"rate": self.f_sampling, "samps_per_chan": buffer_size}
         self.gvs = GVS()
         self.is_connected = self.gvs.connect(self.physical_channel_name,
@@ -97,6 +97,33 @@ class WaveExp:
                                 1.0 / self.screen_refresh_freq)
         visual_wave = line_amplitude * -np.sin(2 * np.pi * frequency * visual_time)
         return gvs_wave, visual_wave
+
+    def _analog_feedback_loop(self, gvs_wave, start_end_blip_voltage):
+        """
+        Add a copy of the GVS signal to send to a second channel via the NIDAQ.
+        The copy (but not the GVS signal) has a 2.5 V blip of a single sample
+        at the start and the end, to signal the onset and end of the
+        stimulation. In the signal that is sent to the GVS channel (here:
+        channel A0), the first and last sample are zero.
+        Also, an extra zero sample is added to the end of both signals,
+        to reset the voltage to baseline.
+
+        :param gvs_wave: GVS signal
+        :param start_end_blip_voltage: voltage to give to first and last
+        as a signal. Voltage should not be present in the rest of the waveform.
+        :return: stacked signal, with second row being the original GVS signal,
+        the first row being the copied signal with first and last sample
+        changed to 2.5 V.
+        """
+        duplicate_wave = gvs_wave[:]
+        # blip at start and end of copied GVS wave
+        duplicate_wave[0] = start_end_blip_voltage
+        duplicate_wave[-1] = start_end_blip_voltage
+
+        # add voltage reset (0 sample) at the end
+        gvs_wave = np.append(gvs_wave, 0)
+        duplicate_wave = np.append(duplicate_wave, 0)
+        return np.stack((duplicate_wave, gvs_wave), axis=0)
 
     def check_response(self):
         """
@@ -131,8 +158,9 @@ class WaveExp:
         self.stop_trial = False
         frequency = trial[0]
         self.line_amplitude = trial[1]
-        self.gvs_wave, self.visual_wave = self.make_waves(
+        gvs_wave, self.visual_wave = self.make_waves(
             frequency, self.line_amplitude)
+        self.gvs_wave = self._analog_feedback_loop(gvs_wave, 2.5)
 
     def show_visual(self):
         """
@@ -182,7 +210,8 @@ class WaveExp:
             # send GVS signal
             if self.is_connected:
                 self.gvs.write_to_channel(self.gvs_wave,
-                                          reset_to_zero_volts=True)
+                                          reset_to_zero_volts=False)
+            self.gvs_sent.read_voltage()
 
             # draw visual line
             self.show_visual()
