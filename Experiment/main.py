@@ -1,11 +1,12 @@
 import os
 import json
 import time
+import threading
 from collections import OrderedDict
 import numpy as np
 from psychopy import visual, core, event
 from Experiment.GVS import GVS
-from Experiment.arduino import ArduinoConnect
+from Experiment.arduino import ArduinoConnect, read_voltage
 
 """
 Present sinusoidal GVS with a visual line oscillating around the
@@ -118,7 +119,7 @@ class WaveExp:
         duplicate_wave = gvs_wave[:]
         # blip at start and end of copied GVS wave
         duplicate_wave[0] = start_end_blip_voltage
-        duplicate_wave[-1] = start_end_blip_voltage
+        duplicate_wave[-1] = -start_end_blip_voltage
 
         # add voltage reset (0 sample) at the end
         gvs_wave = np.append(gvs_wave, 0)
@@ -190,16 +191,22 @@ class WaveExp:
         self.triggers["startText"] = True
         while True:
             self.display_stimuli()
-            start_key = event.getKeys("space")
+            start_key = event.getKeys(keyList=["space", "escape"])
             if "space" in start_key:
                 self.triggers["startText"] = False
                 self.display_stimuli()
                 break
+            elif "escape" in start_key:
+                self.quit_exp()
 
     def run(self):
         """
         Run the experiment
         """
+        # start reading from Arduino
+        self.ard_reader = threading.Thread(target=read_voltage,
+                                           args=(self.gvs_sent.serial_in,))
+        self.ard_reader.start()
         for trial in self.trial_list:
 
             self.init_trial(trial)
@@ -211,7 +218,6 @@ class WaveExp:
             if self.is_connected:
                 self.gvs.write_to_channel(self.gvs_wave,
                                           reset_to_zero_volts=False)
-            self.gvs_sent.read_voltage()
 
             # draw visual line
             self.show_visual()
@@ -236,6 +242,7 @@ class WaveExp:
     def quit_exp(self):
         self.win.close()
         core.quit()
+        self.ard_reader.join()
         self.gvs.quit()
 
 

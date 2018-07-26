@@ -8,6 +8,7 @@ as "Arduino" on Windows.
 
 import serial
 import serial.tools.list_ports
+import time
 
 
 class ArduinoConnect:
@@ -43,10 +44,24 @@ class ArduinoConnect:
             print("Warning: no signal from Arduino detected, check connection")
         return self.serial_in
 
-    def read_voltage(self):
-        """
-        Arduino send unsigned integer from 0 - 1023 which
-        must be translated to a voltage between -5 V and 5 V.
-        :return: voltage
-        """
-        return 2.0 * (self.serial_in.read() * (5.0 / 1023.0)) - 5.0
+
+def read_voltage(serial_in):
+    """
+    Arduino send unsigned integer from 0 - 1023 which
+    must be translated to a voltage between -5 V and 5 V.
+    :return: voltage
+    """
+    while True:
+        digital_in = serial_in.readline()
+        start_time = time.time()
+        number_in = 0
+        try:
+            number_in = int(digital_in.decode().rstrip())
+        except:
+            pass
+        if number_in in [634, 635]:
+            print("flag at {}".format(start_time))
+        # digital_in = serial_in.read(4)
+        # number_in = digital_in.decode()
+        # print(digital_in)
+    # return 2.0 * (digital_in * (5.0 / 1023.0)) - 5.0
