@@ -54,9 +54,10 @@ def read_voltage(serial_in):
     while True:
         digital_in = serial_in.readline()
         start_time = time.time()
+        digital_in = digital_in.decode()
         number_in = 0
         try:
-            number_in = int(digital_in.decode().rstrip())
+            number_in = int(digital_in.rstrip())
         except:
             pass
         if number_in in [634, 635]:
