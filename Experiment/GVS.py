@@ -51,8 +51,6 @@ class GVS(object):
         (software included with driver installation) and look under
         "Devices and Interfaces").
         The name might look something like "cDAQ1Mod1/ao0".
-        :param sampling_rate: samples per second to generate per channel.
-        Default is 10 kHz.
         **timing_args : keyword arguments from
         nidqamx.task.timing.cfg_samp_clk_timing.
         :return: True if connection was successful, otherwise False.
@@ -65,8 +63,8 @@ class GVS(object):
             self.multiple_channels = True
             self.n_channels = len(physical_channel_name)
         else:
-             self.logger.error("GVS.connect: please specify a valid "
-                               "physical channel name.")
+            self.logger.error("GVS.connect: please specify a valid "
+                              "physical channel name.")
 
         try:
             if self.multiple_channels:
@@ -74,7 +72,11 @@ class GVS(object):
                 for chan_name in physical_channel_name:
                     self.add_ao_channel(chan_name)
                 # config timing
-                self.task.timing.cfg_samp_clk_timing(**timing_args)
+                if "rate" not in timing_args:
+                    rate = 1e3
+                    self.task.timing.cfg_samp_clk_timing(rate, **timing_args)
+                else:
+                    self.task.timing.cfg_samp_clk_timing(**timing_args)
                 # create output stream writer
                 self.writer = stream_writers.AnalogMultiChannelWriter(
                     self.task.out_stream, auto_start=True
@@ -83,7 +85,11 @@ class GVS(object):
                 # connect single analog output channel
                 self.add_ao_channel(physical_channel_name)
                 # config timing
-                self.task.timing.cfg_samp_clk_timing(**timing_args)
+                if "rate" not in timing_args:
+                    rate = 1e3
+                    self.task.timing.cfg_samp_clk_timing(rate, **timing_args)
+                else:
+                    self.task.timing.cfg_samp_clk_timing(**timing_args)
                 # create output stream writer
                 self.writer = stream_writers.AnalogSingleChannelWriter(
                     self.task.out_stream, auto_start=True
