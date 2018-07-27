@@ -5,7 +5,7 @@ from Experiment.GVS import GVS
 from Experiment.loggingConfig import Worker, formatter, default_logging_level
 
 
-class GVSHandler():
+class GVSHandler:
     def __init__(self, param_queue, status_queue, logging_queue, buffer_size):
         PHYSICAL_CHANNEL_NAME = ["cDAQ1Mod1/ao0", "cDAQ1Mod1/ao1"]
         SAMPLING_FREQ = 1e3
@@ -54,7 +54,7 @@ class GVSHandler():
         """
         while True:
             data = self.param_queue.get()
-            if isinstance(data, str) & data == "STOP":
+            if isinstance(data, str) and (data == "STOP"):
                 quit_gvs = self.gvs.quit()
                 if quit_gvs:
                     self.status_queue.put({"quit": True})
@@ -66,14 +66,14 @@ class GVSHandler():
                 if isinstance(data, np.ndarray):
                     self.stimulus = self._analog_feedback_loop(data)
 
-                elif isinstance(data, bool) & (data is True):
+                elif isinstance(data, bool) and (data is True):
                     self._send_stimulus()
 
                 else:
                     self.logger.error("Incorrect input to GVSHandler parameter"
-                                      " queue. Input must be a dict with "
-                                      "parameters specified in GVS.py, a "
-                                      "boolean, or a string STOP to quit.")
+                                      " queue. Input must be a numpy array "
+                                      "with samples, a boolean, or a "
+                                      "string STOP to quit.")
                     self.status_queue.put({"stim_created": False})
 
     def _analog_feedback_loop(self, gvs_wave, start_end_blip_voltage=2.5):
