@@ -1,5 +1,6 @@
 # Nynke Niehof, 2018
 
+import time
 import numpy as np
 from Experiment.GVS import GVS
 from Experiment.loggingConfig import Worker, formatter, default_logging_level
@@ -8,7 +9,7 @@ from Experiment.loggingConfig import Worker, formatter, default_logging_level
 class GVSHandler:
 
     def __init__(self, param_queue, status_queue, logging_queue, buffer_size):
-        PHYSICAL_CHANNEL_NAME = ["cDAQ1Mod1/ao0", "cDAQ1Mod1/ao1"]
+        PHYSICAL_CHANNEL_NAME = "cDAQ1Mod1/ao0"
         SAMPLING_FREQ = 1e3
 
         # I/O queues
@@ -65,7 +66,7 @@ class GVSHandler:
 
             else:
                 if isinstance(data, np.ndarray):
-                    self.stimulus = self._analog_feedback_loop(data)
+                    self.stimulus = data
                     if self.stimulus is None:
                         self.status_queue.put({"stim_created": False})
                     else:
@@ -120,9 +121,16 @@ class GVSHandler:
         # only try to send if there is a stimulus available
         if self.stimulus is not None:
             try:
+                # send the GVS onset time to the main process
+                t_start_gvs = time.time()
+                self.status_queue.put({"t_start_gvs": t_start_gvs})
                 samps_written = self.gvs.write_to_channel(self.stimulus,
                                                           reset_to_zero_volts=False)
-                n_samples = np.shape(self.stimulus)[1]
+                if self.stimulus.ndim == 1:
+                    n_samples = len(self.stimulus)
+                else:
+                    n_samples = np.shape(self.stimulus)[1]
+
                 # delete stimulus after sending, so that it can only be sent once
                 self.stimulus = None
             except AttributeError as err:

@@ -4,12 +4,10 @@ import multiprocessing
 from queue import Empty
 import json
 import time
-import threading
 from collections import OrderedDict
 import numpy as np
 from psychopy import visual, core, event
 from Experiment.GVSHandler import GVSHandler
-from Experiment.arduinoHandler import ArduinoHandler
 from Experiment.loggingConfig import Listener, Worker
 
 """
@@ -35,8 +33,9 @@ class WaveExp:
         self.n_trials = 2
         self.duration_s = 10.0
         self.current_mA = 1.0
-        self.physical_channel_name = ["cDAQ1Mod1/ao0", "cDAQ1Mod1/ao1"]
+        self.physical_channel_name = "cDAQ1Mod1/ao0"
         self.line_amplitude_step_size = 0.5
+        self.oled_delay = 0.05
 
         # TODO: generate trial list
         # frequency, amplitude
@@ -53,6 +52,7 @@ class WaveExp:
         self.visual_wave = None
         self.line_amplitude = 1.0
         self.stop_trial = False
+        self.visual_onset_delay = 0
 
         # root directory
         abs_path = os.path.abspath("__file__")
@@ -77,10 +77,6 @@ class WaveExp:
         # set up connection with galvanic stimulator
         self._gvs_setup()
         self._check_gvs_status("connected")
-
-        # connect to Arduino for retrieving GVS signals sent to the stimulator
-        self._arduino_setup()
-        self._check_gvs_status("connected", from_queue=self.ard_return_queue)
 
         # create stimuli
         self.make_stim = Stimuli(self.win, self.settings_dir, self.n_trials)
@@ -139,18 +135,6 @@ class WaveExp:
                                                          self.log_queue,
                                                          buffer_size))
         self.gvs_process.start()
-
-    def _arduino_setup(self):
-        """
-        Establish connection with Arduino
-        """
-        self.ard_stop_queue = multiprocessing.Queue()
-        self.ard_return_queue = multiprocessing.Queue()
-        self.ard_reader = multiprocessing.Process(target=ArduinoHandler,
-                                                  args=(self.ard_stop_queue,
-                                                        self.ard_return_queue,
-                                                        self.log_queue))
-        self.ard_reader.start()
 
     def _check_gvs_status(self, key, from_queue=None, blocking=True):
         """
@@ -220,7 +204,6 @@ class WaveExp:
         line_start = time.time()
 
         for frame in self.visual_wave:
-            self.get_gvs_trigger()
             self.stimuli["rodStim"].setOri(frame * self.line_amplitude)
             self.line_ori.append(frame * self.line_amplitude)
             self.display_stimuli()
@@ -234,14 +217,6 @@ class WaveExp:
         self.triggers["rodStim"] = False
         self.display_stimuli()
 
-    def get_gvs_trigger(self):
-        try:
-            trigger = self.ard_return_queue.get(block=False)
-            print(trigger)
-        except Empty:
-            # do nothing if there is no input
-            pass
-
     def init_trial(self, trial):
         """
         Initialise trial
@@ -250,10 +225,11 @@ class WaveExp:
         self.line_ori = []
         self.frame_times = []
         self.stop_trial = False
-        frequency = trial[0]
+        self.frequency = trial[0]
         self.line_amplitude = trial[1]
+        self.visual_onset_delay = (1.0 / self.frequency) - self.oled_delay
         self.gvs_wave, self.visual_wave = self.make_waves(
-            frequency, self.line_amplitude)
+            self.frequency, self.line_amplitude)
         # send GVS signal to handler
         self.param_queue.put(self.gvs_wave)
         self.logger_main.debug("wave sent to GVS handler")
@@ -277,12 +253,22 @@ class WaveExp:
                 break
             elif "escape" in start_key:
                 self.quit_exp()
+# TODO: continue here
+    def _header(self):
+        header = "trial_nr, frequency, "
+
+    def _format_data(self):
+        formatted_data = "{}, {}\n".format(
+            self.trial_nr, self.frequency
+        )
 
     def run(self):
         """
         Run the experiment
         """
+        self.trial_nr = 0
         for trial in self.trial_list:
+            self.trial_nr += 1
 
             self.init_trial(trial)
 
@@ -292,9 +278,19 @@ class WaveExp:
             # send the GVS signal to the stimulator
             self.param_queue.put(True)
 
+            # get onset time of GVS
+            gvs_start = self._check_gvs_status("t_start_gvs")
+            print(gvs_start)
+            while True:
+                print("no")
+                if (time.time() - gvs_start) > self.visual_onset_delay:
+                    print("yes")
+                    break
+
             # draw visual line
             self.show_visual()
             # self.stimulus_plot(self.line_ori, self.frame_times)
+
         self.quit_exp()
 
     def stimulus_plot(self, stim, xvals=None, title=""):
@@ -328,7 +324,6 @@ class WaveExp:
         # close psychopy window and the program
         self.win.close()
         core.quit()
-        self.ard_reader.join()
 
 
 class SaveData:
