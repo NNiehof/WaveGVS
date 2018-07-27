@@ -21,7 +21,7 @@ class TestHandlerCommunication(unittest.TestCase):
                                                   args=(self.param_queue,
                                                         self.status_queue,
                                                         self.log_queue,
-                                                        5001))
+                                                        2001))
         self.status = dict()
         self.gvsProcess.start()
         self.connected = self.status_queue.get()
@@ -36,7 +36,7 @@ class TestHandlerCommunication(unittest.TestCase):
         self.assertTrue(self.connected)
 
     def test_create_stim(self):
-        stim = np.ones(5000)
+        stim = np.ones(2000)
         stim[-1] = 0
         self.param_queue.put(stim)
         while "stim_created" not in self.status:
@@ -50,9 +50,8 @@ class TestHandlerCommunication(unittest.TestCase):
         self.assertFalse(self.status["stim_created"])
 
     def test_send_stim(self):
-        stim = np.ones(5000)
+        stim = np.ones(2000)
         stim[-1] = 0
-        self.param_queue.put(stim)
         self.param_queue.put(stim)
         self.param_queue.put(True)
         count = 0
@@ -64,7 +63,7 @@ class TestHandlerCommunication(unittest.TestCase):
                 break
 
     def test_send_duplicate_stim(self):
-        stim = np.ones(5000)
+        stim = np.ones(2000)
         stim[-1] = 0
         self.param_queue.put(stim)
         self.param_queue.put(True)
