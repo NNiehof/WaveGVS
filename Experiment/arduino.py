@@ -35,9 +35,7 @@ class ArduinoConnect:
         no Arduino is found, returns None.
         """
         comports = list(serial.tools.list_ports.comports())
-        self.logger.debug(comports)
         for port in comports:
-            self.logger.debug(port)
             if self.device_name in port[1]:
                 self.cport = port[0]
         if not self.cport:
@@ -69,12 +67,6 @@ class ArduinoConnect:
         if digital_in:
             number_in = int(digital_in.rstrip())
             return number_in, start_time
-
-        # if number_in in [634, 635]:
-        #     print("flag at {}".format(start_time))
-        # digital_in = serial_in.read(4)
-        # number_in = digital_in.decode()
-        # print(digital_in)
     # return 2.0 * (digital_in * (5.0 / 1023.0)) - 5.0
 
     def quit(self):
