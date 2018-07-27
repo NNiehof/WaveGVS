@@ -9,16 +9,25 @@ as "Arduino" on Windows.
 import serial
 import serial.tools.list_ports
 import time
+import logging
 
 
 class ArduinoConnect:
 
-    def __init__(self, device_name="ttyACM0", baudrate=9600):
+    def __init__(self, device_name="ttyACM0", baudrate=9600, logger=None):
         self.device_name = device_name
         self.baudrate = baudrate
         self.cport = None
         self.serial_in = None
         self.voltage = 0
+
+        # set up logger
+        if logger is not None:
+            self.logger = logger
+        else:
+            logging.basicConfig(level=logging.DEBUG,
+                                format="%(asctime)s %(message)s")
+            self.logger = logging.getLogger()
 
     def connect(self):
         """
@@ -26,43 +35,50 @@ class ArduinoConnect:
         no Arduino is found, returns None.
         """
         comports = list(serial.tools.list_ports.comports())
+        self.logger.debug(comports)
         for port in comports:
+            self.logger.debug(port)
             if self.device_name in port[1]:
                 self.cport = port[0]
         if not self.cport:
-            print("Warning: no Arduino detected")
+            self.logger.warning("Warning: no Arduino detected")
             return self.cport
 
         # Connect to Arduino, wait for it to initialise
-        self.serial_in = serial.Serial(self.cport, self.baudrate, timeout=2)
+        self.serial_in = serial.Serial(self.cport, self.baudrate, timeout=5)
         # waits until Arduino sends a serial signal, or until timeout
         signal_received = self.serial_in.read()
 
         if signal_received:
-            print("Connection with Arduino established")
+            self.logger.info("Connection with Arduino established")
+            return True
         else:
-            print("Warning: no signal from Arduino detected, check connection")
-        return self.serial_in
+            self.logger.warning("Warning: no signal from Arduino detected, check connection")
+            return False
 
-
-def read_voltage(serial_in):
-    """
-    Arduino send unsigned integer from 0 - 1023 which
-    must be translated to a voltage between -5 V and 5 V.
-    :return: voltage
-    """
-    while True:
-        digital_in = serial_in.readline()
+    def read_voltage(self):
+        """
+        Arduino send unsigned integer from 0 - 1023 which
+        must be translated to a voltage between -5 V and 5 V.
+        :return: voltage
+        """
+        digital_in = self.serial_in.readline()
         start_time = time.time()
+        number_in = None
         digital_in = digital_in.decode()
-        number_in = 0
-        try:
+        if digital_in:
             number_in = int(digital_in.rstrip())
-        except:
-            pass
-        if number_in in [634, 635]:
-            print("flag at {}".format(start_time))
+            return number_in, start_time
+
+        # if number_in in [634, 635]:
+        #     print("flag at {}".format(start_time))
         # digital_in = serial_in.read(4)
         # number_in = digital_in.decode()
         # print(digital_in)
     # return 2.0 * (digital_in * (5.0 / 1023.0)) - 5.0
+
+    def quit(self):
+        """
+        Close the serial port connection.
+        """
+        self.serial_in.close()

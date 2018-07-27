@@ -9,7 +9,7 @@ from collections import OrderedDict
 import numpy as np
 from psychopy import visual, core, event
 from Experiment.GVSHandler import GVSHandler
-from Experiment.arduino import ArduinoConnect, read_voltage
+from Experiment.arduinoHandler import ArduinoHandler
 from Experiment.loggingConfig import Listener, Worker
 
 """
@@ -79,8 +79,8 @@ class WaveExp:
         self._check_gvs_status("connected")
 
         # connect to Arduino for retrieving GVS signals sent to the stimulator
-        self.gvs_sent = ArduinoConnect(device_name="Arduino", baudrate=9600)
-        self.gvs_sent.connect()
+        self._arduino_setup()
+        self._check_gvs_status("connected", from_queue=self.ard_return_queue)
 
         # create stimuli
         self.make_stim = Stimuli(self.win, self.settings_dir, self.n_trials)
@@ -140,7 +140,19 @@ class WaveExp:
                                                          buffer_size))
         self.gvs_process.start()
 
-    def _check_gvs_status(self, key, blocking=True):
+    def _arduino_setup(self):
+        """
+        Establish connection with Arduino
+        """
+        self.ard_stop_queue = multiprocessing.Queue()
+        self.ard_return_queue = multiprocessing.Queue()
+        self.ard_reader = multiprocessing.Process(target=ArduinoHandler,
+                                                  args=(self.ard_stop_queue,
+                                                        self.ard_return_queue,
+                                                        self.log_queue))
+        self.ard_reader.start()
+
+    def _check_gvs_status(self, key, from_queue=None, blocking=True):
         """
         Check the status of *key* on the status queue. Returns a boolean
         for the status. Note: this is a blocking process.
@@ -150,9 +162,11 @@ class WaveExp:
         return.
         :return: bool or None
         """
+        if from_queue is None:
+            from_queue = self.status_queue
         while True:
             try:
-                status = self.status_queue.get(block=blocking)
+                status = from_queue.get(block=blocking)
                 if key in status:
                     return status[key]
             except Empty:
@@ -198,6 +212,36 @@ class WaveExp:
                 self.stimuli[stim].draw()
         self.win.flip()
 
+    def show_visual(self):
+        """
+        Visual loop that draws the stimuli on screen
+        """
+        self.triggers["rodStim"] = True
+        line_start = time.time()
+
+        for frame in self.visual_wave:
+            self.get_gvs_trigger()
+            self.stimuli["rodStim"].setOri(frame * self.line_amplitude)
+            self.line_ori.append(frame * self.line_amplitude)
+            self.display_stimuli()
+            self.frame_times.append(time.time())
+            self.check_response()
+            if self.stop_trial:
+                resp_time = time.time() - line_start
+                print("response time: {} s".format(resp_time))
+                break
+
+        self.triggers["rodStim"] = False
+        self.display_stimuli()
+
+    def get_gvs_trigger(self):
+        try:
+            trigger = self.ard_return_queue.get(block=False)
+            print(trigger)
+        except Empty:
+            # do nothing if there is no input
+            pass
+
     def init_trial(self, trial):
         """
         Initialise trial
@@ -219,27 +263,6 @@ class WaveExp:
         else:
             self.logger_main.warning("WARNING: current profile not created")
 
-    def show_visual(self):
-        """
-        Visual loop that draws the stimuli on screen
-        """
-        self.triggers["rodStim"] = True
-        line_start = time.time()
-
-        for frame in self.visual_wave:
-            self.stimuli["rodStim"].setOri(frame * self.line_amplitude)
-            self.line_ori.append(frame * self.line_amplitude)
-            self.display_stimuli()
-            self.frame_times.append(time.time())
-            self.check_response()
-            if self.stop_trial:
-                resp_time = time.time() - line_start
-                print("response time: {} s".format(resp_time))
-                break
-
-        self.triggers["rodStim"] = False
-        self.display_stimuli()
-
     def wait_start(self):
         """
         Tell the participant to press the space bar to start the trial
@@ -259,10 +282,6 @@ class WaveExp:
         """
         Run the experiment
         """
-        # start reading from Arduino
-        self.ard_reader = threading.Thread(target=read_voltage,
-                                           args=(self.gvs_sent.serial_in,))
-        self.ard_reader.start()
         for trial in self.trial_list:
 
             self.init_trial(trial)
