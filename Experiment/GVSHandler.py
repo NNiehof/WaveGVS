@@ -14,7 +14,7 @@ class GVSHandler:
         self.param_queue = param_queue
         self.status_queue = status_queue
         self.logging_queue = logging_queue
-        self.stimulus = []
+        self.stimulus = None
 
         # set up logger
         worker = Worker(logging_queue, formatter, default_logging_level,
@@ -65,6 +65,10 @@ class GVSHandler:
             else:
                 if isinstance(data, np.ndarray):
                     self.stimulus = self._analog_feedback_loop(data)
+                    if self.stimulus is None:
+                        self.status_queue.put({"stim_created": False})
+                    else:
+                        self.status_queue.put({"stim_created": True})
 
                 elif isinstance(data, bool) and (data is True):
                     self._send_stimulus()
@@ -102,7 +106,6 @@ class GVSHandler:
         gvs_wave = np.append(gvs_wave, 0)
         duplicate_wave = np.append(duplicate_wave, 0)
         stimulus = np.stack((duplicate_wave, gvs_wave), axis=0)
-        self.status_queue.put({"stim_created": True})
         return stimulus
 
     def _send_stimulus(self):

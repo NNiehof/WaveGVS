@@ -33,6 +33,7 @@ class Listener(multiprocessing.Process):
 
     def run(self):
         self._listener_config()
+        self.root_logger.info("logging listener process started")
 
         while True:
             try:

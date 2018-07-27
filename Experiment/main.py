@@ -24,6 +24,8 @@ class WaveExp:
 
     def __init__(self, sj=None, condition=""):
 
+        self.debug = True
+
         # experiment settings and conditions
         self.sj = sj
         self.paradigm = "waveGVS"
@@ -70,6 +72,7 @@ class WaveExp:
         main_worker = Worker(self.log_queue, self.log_formatter,
                              self.default_logging_level, "main")
         self.logger_main = main_worker.logger
+        self.logger_main.debug("logger set up")
 
         # set up connection with galvanic stimulator
         self._gvs_setup()
@@ -107,7 +110,10 @@ class WaveExp:
         """
         # settings
         self.log_formatter = logging.Formatter("%(asctime)s %(processName)s %(thread)d %(message)s")
-        self.default_logging_level = logging.DEBUG
+        if self.debug:
+            self.default_logging_level = logging.DEBUG
+        else:
+            self.default_logging_level = logging.INFO
 
         # set up listener thread for central logging from all processes
         queue_manager = multiprocessing.Manager()
@@ -132,6 +138,7 @@ class WaveExp:
                                                          self.status_queue,
                                                          self.log_queue,
                                                          buffer_size))
+        self.gvs_process.start()
 
     def _check_gvs_status(self, key, blocking=True):
         """
@@ -195,6 +202,7 @@ class WaveExp:
         """
         Initialise trial
         """
+        self.logger_main.debug("initialising trial")
         self.line_ori = []
         self.frame_times = []
         self.stop_trial = False
@@ -204,6 +212,7 @@ class WaveExp:
             frequency, self.line_amplitude)
         # send GVS signal to handler
         self.param_queue.put(self.gvs_wave)
+        self.logger_main.debug("wave sent to GVS handler")
         # check whether the gvs profile was successfully created
         if self._check_gvs_status("stim_created"):
             self.logger_main.info("gvs current profile created")
