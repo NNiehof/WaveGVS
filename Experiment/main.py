@@ -35,7 +35,7 @@ class WaveExp:
         self.visual_soa = 1.0
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.25
+        self.line_amplitude_step_size = 0.5
         self.oled_delay = 0.05
         self.header = "trial_nr; current; frequency; line_offset; " \
                       "line_amplitude\n"
@@ -186,15 +186,15 @@ class WaveExp:
         """
         Check for key presses, update the visual line amplitude
         """
-        key_response = event.getKeys(keyList=["left", "right", "return", "escape"])
+        key_response = event.getKeys(keyList=["down", "up", "return", "escape"])
         if key_response:
-            if "left" in key_response:
+            if "down" in key_response:
                 # only positive amplitudes
                 if (self.line_amplitude - self.line_amplitude_step_size) >= 0:
                     self.line_amplitude -= self.line_amplitude_step_size
                 else:
                     self.line_amplitude = 0
-            elif "right" in key_response:
+            elif "up" in key_response:
                 self.line_amplitude += self.line_amplitude_step_size
             elif "return" in key_response:
                 self.stop_trial = True
@@ -303,6 +303,9 @@ class WaveExp:
 
             # save data to file
             self.save_data.write(self._format_data())
+
+            # get end time of GVS (blocks until GVS is finished)
+            gvs_end = self._check_gvs_status("stim_sent")
 
         self.quit_exp()
 
