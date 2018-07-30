@@ -9,6 +9,7 @@ import numpy as np
 from psychopy import visual, core, event
 from Experiment.GVSHandler import GVSHandler
 from Experiment.loggingConfig import Listener, Worker
+from Experiment.RandStim import RandStim
 
 """
 Present sinusoidal GVS with a visual line oscillating around the
@@ -30,22 +31,19 @@ class WaveExp:
         self.condition = condition
         self.f_sampling = 1e3
         self.screen_refresh_freq = 60
-        self.n_trials = 2
         self.duration_s = 10.0
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.5
+        self.line_amplitude_step_size = 0.25
         self.oled_delay = 0.05
-
-        # TODO: generate trial list
-        # frequency, amplitude
-        self.trial_list = [[2.0, 1.0], [1.0, 1.5], [0.2, 3.0],
-                           [2.0, 3.0], [1.0, 1.0], [0.2, 1.5],
-                           [2.0, 1.5], [1.0, 3.0], [0.2, 1.0]]
+        self.header = "trial_nr; current; frequency; line_offset; " \
+                      "line_amplitude\n"
 
         # initialise
         self.make_stim = None
         self.stimuli = None
+        self.conditions = None
+        self.trials = None
         self.triggers = None
         self.gvs_wave = None
         self.gvs_sent = None
@@ -53,6 +51,7 @@ class WaveExp:
         self.line_amplitude = 1.0
         self.stop_trial = False
         self.visual_onset_delay = 0
+        self.trial_nr = 0
 
         # root directory
         abs_path = os.path.abspath("__file__")
@@ -78,6 +77,13 @@ class WaveExp:
         self._gvs_setup()
         self._check_gvs_status("connected")
 
+        # trial list
+        conditions_file = "{}/conditions.json".format(self.settings_dir)
+        with open(conditions_file) as json_file:
+            self.conditions = json.load(json_file)
+        self.trials = RandStim(**self.conditions)
+        self.n_trials = self.trials.get_n_trials()
+
         # create stimuli
         self.make_stim = Stimuli(self.win, self.settings_dir, self.n_trials)
         self.stimuli, self.triggers = self.make_stim.create()
@@ -85,6 +91,7 @@ class WaveExp:
         # data save file
         self.save_data = SaveData(self.sj, self.paradigm, self.condition,
                                   sj_leading_zeros=3, root_dir=self.root_dir)
+        self.save_data.write_header(self.header)
 
         self.logger_main.info("setup complete")
 
@@ -158,18 +165,19 @@ class WaveExp:
             if not blocking:
                 return None
 
-    def make_waves(self, frequency, line_amplitude):
+    def make_waves(self):
         """
-        Make sine GVS signal and and cosine visual line angle of the
-        given frequency.
+        Make sine GVS signal and and antiphase sine visual line angle with
+        the current trial's parameters.
         :return: gvs_wave, line_angle
         """
         gvs_time = np.arange(0, self.duration_s,
                              1.0 / self.f_sampling)
-        gvs_wave = self.current_mA * np.sin(2 * np.pi * frequency * gvs_time)
+        gvs_wave = self.current_mA * np.sin(2 * np.pi * self.frequency * gvs_time)
         visual_time = np.arange(0, self.duration_s,
                                 1.0 / self.screen_refresh_freq)
-        visual_wave = line_amplitude * -np.sin(2 * np.pi * frequency * visual_time)
+        visual_wave = self.line_amplitude * -np.sin(
+            2 * np.pi * self.frequency * visual_time)
         return gvs_wave, visual_wave
 
     def check_response(self):
@@ -179,7 +187,11 @@ class WaveExp:
         key_response = event.getKeys(keyList=["left", "right", "return", "escape"])
         if key_response:
             if "left" in key_response:
-                self.line_amplitude -= self.line_amplitude_step_size
+                # only positive amplitudes
+                if (self.line_amplitude - self.line_amplitude_step_size) >= 0:
+                    self.line_amplitude -= self.line_amplitude_step_size
+                else:
+                    self.line_amplitude = 0
             elif "right" in key_response:
                 self.line_amplitude += self.line_amplitude_step_size
             elif "return" in key_response:
@@ -204,32 +216,32 @@ class WaveExp:
         line_start = time.time()
 
         for frame in self.visual_wave:
-            self.stimuli["rodStim"].setOri(frame * self.line_amplitude)
-            self.line_ori.append(frame * self.line_amplitude)
+            line_angle = (frame * self.line_amplitude) + self.line_offset
+            self.stimuli["rodStim"].setOri(line_angle)
+            self.line_ori.append(line_angle)
             self.display_stimuli()
             self.frame_times.append(time.time())
             self.check_response()
-            if self.stop_trial:
-                resp_time = time.time() - line_start
-                print("response time: {} s".format(resp_time))
-                break
 
+        # save line amplitude endpoint
+        self.line_ori.append(self.visual_wave[-1] * self.line_amplitude)
         self.triggers["rodStim"] = False
         self.display_stimuli()
 
-    def init_trial(self, trial):
+    def init_trial(self):
         """
         Initialise trial
         """
         self.logger_main.debug("initialising trial")
+        trial = self.trials.get_stimulus(self.trial_nr)
         self.line_ori = []
         self.frame_times = []
-        self.stop_trial = False
-        self.frequency = trial[0]
-        self.line_amplitude = trial[1]
+        self.current_mA = trial[0]
+        self.frequency = trial[1]
+        self.line_offset = trial[2]
+        self.line_amplitude = trial[3]
         self.visual_onset_delay = (1.0 / self.frequency) - self.oled_delay
-        self.gvs_wave, self.visual_wave = self.make_waves(
-            self.frequency, self.line_amplitude)
+        self.gvs_wave, self.visual_wave = self.make_waves()
         # send GVS signal to handler
         self.param_queue.put(self.gvs_wave)
         self.logger_main.debug("wave sent to GVS handler")
@@ -244,6 +256,8 @@ class WaveExp:
         Tell the participant to press the space bar to start the trial
         """
         self.triggers["startText"] = True
+        # flush old key events before starting to listen
+        event.clearEvents()
         while True:
             self.display_stimuli()
             start_key = event.getKeys(keyList=["space", "escape"])
@@ -253,24 +267,20 @@ class WaveExp:
                 break
             elif "escape" in start_key:
                 self.quit_exp()
-# TODO: continue here
-    def _header(self):
-        header = "trial_nr, frequency, "
 
     def _format_data(self):
-        formatted_data = "{}, {}\n".format(
-            self.trial_nr, self.frequency
-        )
+        formatted_data = "{}; {}; {}; {}; {}\n".format(
+            self.trial_nr, self.current_mA, self.frequency, self.line_offset,
+            self.line_ori)
+        return formatted_data
 
     def run(self):
         """
         Run the experiment
         """
-        self.trial_nr = 0
-        for trial in self.trial_list:
+        for trial in range(self.n_trials):
+            self.init_trial()
             self.trial_nr += 1
-
-            self.init_trial(trial)
 
             # wait for space bar press to start trial
             self.wait_start()
@@ -280,16 +290,17 @@ class WaveExp:
 
             # get onset time of GVS
             gvs_start = self._check_gvs_status("t_start_gvs")
-            print(gvs_start)
             while True:
-                print("no")
                 if (time.time() - gvs_start) > self.visual_onset_delay:
-                    print("yes")
                     break
 
+            # clear old key events
+            event.clearEvents()
             # draw visual line
             self.show_visual()
-            # self.stimulus_plot(self.line_ori, self.frame_times)
+
+            # save data to file
+            self.save_data.write(self._format_data())
 
         self.quit_exp()
 
