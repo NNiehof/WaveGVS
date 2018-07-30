@@ -31,7 +31,8 @@ class WaveExp:
         self.condition = condition
         self.f_sampling = 1e3
         self.screen_refresh_freq = 60
-        self.duration_s = 10.0
+        self.duration_s = 12.0
+        self.visual_soa = 1.0
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
         self.line_amplitude_step_size = 0.25
@@ -174,7 +175,8 @@ class WaveExp:
         gvs_time = np.arange(0, self.duration_s,
                              1.0 / self.f_sampling)
         gvs_wave = self.current_mA * np.sin(2 * np.pi * self.frequency * gvs_time)
-        visual_time = np.arange(0, self.duration_s,
+        visual_duration = self.duration_s - (2 * self.visual_soa)
+        visual_time = np.arange(0, visual_duration,
                                 1.0 / self.screen_refresh_freq)
         visual_wave = self.line_amplitude * -np.sin(
             2 * np.pi * self.frequency * visual_time)
@@ -240,7 +242,7 @@ class WaveExp:
         self.frequency = trial[1]
         self.line_offset = trial[2]
         self.line_amplitude = trial[3]
-        self.visual_onset_delay = (1.0 / self.frequency) - self.oled_delay
+        self.visual_onset_delay = self.visual_soa - self.oled_delay
         self.gvs_wave, self.visual_wave = self.make_waves()
         # send GVS signal to handler
         self.param_queue.put(self.gvs_wave)
