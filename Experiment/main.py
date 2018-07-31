@@ -225,6 +225,13 @@ class WaveExp:
             self.frame_times.append(time.time())
             self.check_response()
 
+        # log visual stimulus times
+        line_end = time.time()
+        self.logger_main.debug("{0} start visual stimulus".format(line_start))
+        self.logger_main.debug("{0} stop visual stimulus".format(line_end))
+        self.logger_main.info("visual stimulus duration = {0}".format(
+            line_end - line_start))
+
         # save line amplitude endpoint
         self.line_ori.append(self.visual_wave[-1] * self.line_amplitude)
         self.triggers["rodStim"] = False
