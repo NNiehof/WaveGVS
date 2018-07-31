@@ -40,6 +40,10 @@ class WaveExp:
         self.header = "trial_nr; current; frequency; line_offset; " \
                       "line_amplitude\n"
 
+        # longer practice trials
+        if "practice" in self.condition:
+            self.duration_s = 17.0
+
         # initialise
         self.make_stim = None
         self.stimuli = None
@@ -79,7 +83,11 @@ class WaveExp:
         self._check_gvs_status("connected")
 
         # trial list
-        conditions_file = "{}/conditions.json".format(self.settings_dir)
+        if "practice" in self.condition:
+            conditions_file = "{}/practice_conditions.json".format(
+                self.settings_dir)
+        else:
+            conditions_file = "{}/conditions.json".format(self.settings_dir)
         with open(conditions_file) as json_file:
             self.conditions = json.load(json_file)
         self.trials = RandStim(**self.conditions)
@@ -457,7 +465,7 @@ class Stimuli:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    exp = WaveExp(sj=99, condition="")
+    exp = WaveExp(sj=99, condition="practice")
     exp.setup()
     exp.run()
     exp.quit_exp()
