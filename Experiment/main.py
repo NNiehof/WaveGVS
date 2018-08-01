@@ -35,14 +35,20 @@ class WaveExp:
         self.visual_soa = 1.0
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.5
+        self.line_amplitude_step_size = 0.25
+        self.phase_step_size = 1
         self.oled_delay = 0.05
         self.header = "trial_nr; current; frequency; line_offset; " \
                       "line_amplitude\n"
+        self.phase = 0
 
         # longer practice trials
         if "practice" in self.condition:
             self.duration_s = 17.0
+        # task: adapt phase as well as amplitude
+        self.phase_shift = False
+        if "phaseshift" in self.condition:
+            self.phase_shift = True
 
         # initialise
         self.make_stim = None
@@ -52,9 +58,9 @@ class WaveExp:
         self.triggers = None
         self.gvs_wave = None
         self.gvs_sent = None
-        self.visual_wave = None
+        self.visual_time = None
         self.line_amplitude = 1.0
-        self.stop_trial = False
+        self.line_angle = None
         self.visual_onset_delay = 0
         self.trial_nr = 0
 
@@ -186,15 +192,30 @@ class WaveExp:
         visual_duration = self.duration_s - (2 * self.visual_soa)
         visual_time = np.arange(0, visual_duration,
                                 1.0 / self.screen_refresh_freq)
-        visual_wave = self.line_amplitude * -np.sin(
-            2 * np.pi * self.frequency * visual_time)
-        return gvs_wave, visual_wave
+        # visual_wave = self.line_amplitude * -np.sin(
+        #     2 * np.pi * self.frequency * visual_time)
+        return gvs_wave, visual_time
+
+    def next_line_orientation(self, t):
+        """
+        Calculate the next orientation of the visual line, with
+        amplitude and phase changed through key presses.
+        :param t: time sample
+        :return: next_orientation
+        """
+        next_ori = self.line_amplitude * np.sin(
+            (2 * np.pi * self.frequency * t) - self.phase) + self.line_offset
+        return next_ori
 
     def check_response(self):
         """
         Check for key presses, update the visual line amplitude
         """
-        key_response = event.getKeys(keyList=["down", "up", "return", "escape"])
+        if self.phase_shift:
+            key_response = event.getKeys(keyList=[
+                "down", "up", "left", "right", "escape"])
+        else:
+            key_response = event.getKeys(keyList=["down", "up", "escape"])
         if key_response:
             if "down" in key_response:
                 # only positive amplitudes
@@ -204,8 +225,10 @@ class WaveExp:
                     self.line_amplitude = 0
             elif "up" in key_response:
                 self.line_amplitude += self.line_amplitude_step_size
-            elif "return" in key_response:
-                self.stop_trial = True
+            elif "left" in key_response:
+                self.phase -= self.phase_step_size
+            elif "right" in key_response:
+                self.phase += self.phase_step_size
             elif "escape" in key_response:
                 self.quit_exp()
 
@@ -225,10 +248,11 @@ class WaveExp:
         self.triggers["rodStim"] = True
         line_start = time.time()
 
-        for frame in self.visual_wave:
-            line_angle = (frame * self.line_amplitude) + self.line_offset
-            self.stimuli["rodStim"].setOri(line_angle)
-            self.line_ori.append(line_angle)
+        for frame in self.visual_time:
+            # line_angle = (frame * self.line_amplitude) + self.line_offset
+            self.line_angle = self.next_line_orientation(frame)
+            self.stimuli["rodStim"].setOri(self.line_angle)
+            self.line_ori.append(self.line_angle)
             self.display_stimuli()
             self.frame_times.append(time.time())
             self.check_response()
@@ -240,8 +264,6 @@ class WaveExp:
         self.logger_main.info("visual stimulus duration = {0}".format(
             line_end - line_start))
 
-        # save line amplitude endpoint
-        self.line_ori.append(self.visual_wave[-1] * self.line_amplitude)
         self.triggers["rodStim"] = False
         self.display_stimuli()
 
@@ -251,6 +273,7 @@ class WaveExp:
         """
         self.logger_main.debug("initialising trial")
         trial = self.trials.get_stimulus(self.trial_nr)
+        self.phase = 0
         self.line_ori = []
         self.frame_times = []
         self.current_mA = trial[0]
@@ -258,7 +281,7 @@ class WaveExp:
         self.line_offset = trial[2]
         self.line_amplitude = trial[3]
         self.visual_onset_delay = self.visual_soa - self.oled_delay
-        self.gvs_wave, self.visual_wave = self.make_waves()
+        self.gvs_wave, self.visual_time = self.make_waves()
         # send GVS signal to handler
         self.param_queue.put(self.gvs_wave)
         self.logger_main.debug("wave sent to GVS handler")
@@ -322,9 +345,13 @@ class WaveExp:
             # get end time of GVS (blocks until GVS is finished)
             gvs_end = self._check_gvs_status("stim_sent")
 
+            # self.stimulus_plot(self.line_ori, self.frame_times)
+            # self.stimulus_plot(self.visual_time, self.line_ori)
+            # self.quit_exp()
+
         self.quit_exp()
 
-    def stimulus_plot(self, stim, xvals=None, title=""):
+    def stimulus_plot(self, xvals=None, stim=None, title=""):
         """
         Plot generated stimulus, here for debugging purposes
         """
@@ -464,8 +491,7 @@ class Stimuli:
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    exp = WaveExp(sj=99, condition="practice")
+    exp = WaveExp(sj=99, condition="phaseshift")
     exp.setup()
     exp.run()
     exp.quit_exp()

@@ -9,5 +9,6 @@
 		-1
 	],
 	"units": "pix",
-	"fullscr": false
+	"fullscr": false,
+	"screen": 1
 }
