@@ -1,7 +1,7 @@
 {
 	"size": [
-		800,
-		600
+		1920,
+		1080
 	],
 	"color": [
 		-1,
@@ -9,6 +9,6 @@
 		-1
 	],
 	"units": "pix",
-	"fullscr": false,
+	"fullscr": true,
 	"screen": 1
 }
