@@ -31,15 +31,15 @@ class WaveExp:
         self.condition = condition
         self.f_sampling = 1e3
         self.screen_refresh_freq = 60
-        self.duration_s = 12.0
-        self.visual_soa = 1.0
+        self.duration_s = 14.0
+        self.visual_soa = None
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.25
-        self.phase_step_size = 1
+        self.line_amplitude_step_size = 0.1
+        self.phase_step_size = 0.5
         self.oled_delay = 0.05
         self.header = "trial_nr; current; frequency; line_offset; " \
-                      "line_amplitude\n"
+                      "line_ori; amplitude; phase\n"
         self.phase = 0
 
         # longer practice trials
@@ -186,9 +186,10 @@ class WaveExp:
         the current trial's parameters.
         :return: gvs_wave, line_angle
         """
-        gvs_time = np.arange(0, self.duration_s,
+        self.gvs_time = np.arange(0, self.duration_s,
                              1.0 / self.f_sampling)
-        gvs_wave = self.current_mA * np.sin(2 * np.pi * self.frequency * gvs_time)
+        gvs_wave = self.current_mA * np.sin(
+            2 * np.pi * self.frequency * self.gvs_time)
         visual_duration = self.duration_s - (2 * self.visual_soa)
         visual_time = np.arange(0, visual_duration,
                                 1.0 / self.screen_refresh_freq)
@@ -203,7 +204,7 @@ class WaveExp:
         :param t: time sample
         :return: next_orientation
         """
-        next_ori = self.line_amplitude * np.sin(
+        next_ori = self.line_amplitude * -np.sin(
             (2 * np.pi * self.frequency * t) - self.phase) + self.line_offset
         return next_ori
 
@@ -252,7 +253,11 @@ class WaveExp:
             # line_angle = (frame * self.line_amplitude) + self.line_offset
             self.line_angle = self.next_line_orientation(frame)
             self.stimuli["rodStim"].setOri(self.line_angle)
+            # save current line parameters in lists
             self.line_ori.append(self.line_angle)
+            self.amplitudes.append(self.line_amplitude)
+            self.phases.append(self.phase)
+            # show stimulus on screen
             self.display_stimuli()
             self.frame_times.append(time.time())
             self.check_response()
@@ -274,12 +279,20 @@ class WaveExp:
         self.logger_main.debug("initialising trial")
         trial = self.trials.get_stimulus(self.trial_nr)
         self.phase = 0
+        # lists for saving the measured data
         self.line_ori = []
+        self.amplitudes = []
+        self.phases = []
         self.frame_times = []
+
+        # trial parameters
         self.current_mA = trial[0]
         self.frequency = trial[1]
         self.line_offset = trial[2]
         self.line_amplitude = trial[3]
+
+        # stimulus asynchrony: start visual one period after GVS
+        self.visual_soa = 1.0 / self.frequency
         self.visual_onset_delay = self.visual_soa - self.oled_delay
         self.gvs_wave, self.visual_time = self.make_waves()
         # send GVS signal to handler
@@ -309,9 +322,9 @@ class WaveExp:
                 self.quit_exp()
 
     def _format_data(self):
-        formatted_data = "{}; {}; {}; {}; {}\n".format(
+        formatted_data = "{}; {}; {}; {}; {}; {}; {}\n".format(
             self.trial_nr, self.current_mA, self.frequency, self.line_offset,
-            self.line_ori)
+            self.line_ori, self.amplitudes, self.phases)
         return formatted_data
 
     def run(self):
@@ -345,8 +358,8 @@ class WaveExp:
             # get end time of GVS (blocks until GVS is finished)
             gvs_end = self._check_gvs_status("stim_sent")
 
-            # self.stimulus_plot(self.line_ori, self.frame_times)
             # self.stimulus_plot(self.visual_time, self.line_ori)
+            # self.stimulus_plot(self.gvs_time, self.gvs_wave)
             # self.quit_exp()
 
         self.quit_exp()
@@ -491,7 +504,7 @@ class Stimuli:
 
 
 if __name__ == "__main__":
-    exp = WaveExp(sj=99, condition="phaseshift")
+    exp = WaveExp(sj=99, condition="")
     exp.setup()
     exp.run()
     exp.quit_exp()
