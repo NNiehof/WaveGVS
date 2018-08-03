@@ -35,7 +35,7 @@ class WaveExp:
         self.visual_soa = None
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.1
+        self.line_amplitude_step_size = 0.25
         self.phase_step_size = 0.5
         self.oled_delay = 0.05
         self.header = "trial_nr; current; frequency; line_offset; " \

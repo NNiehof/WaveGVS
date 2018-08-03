@@ -9,7 +9,7 @@ def habituation_signal():
     """
     Generate a habituation signal with a slow ramp
     """
-    amp = 1.0
+    amp = 2.0
     duration = 25.0
     f_samp = 1e3
     frequency = 1.0
