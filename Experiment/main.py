@@ -219,11 +219,7 @@ class WaveExp:
             key_response = event.getKeys(keyList=["down", "up", "escape"])
         if key_response:
             if "down" in key_response:
-                # only positive amplitudes
-                if (self.line_amplitude - self.line_amplitude_step_size) >= 0:
-                    self.line_amplitude -= self.line_amplitude_step_size
-                else:
-                    self.line_amplitude = 0
+                self.line_amplitude -= self.line_amplitude_step_size
             elif "up" in key_response:
                 self.line_amplitude += self.line_amplitude_step_size
             elif "left" in key_response:
@@ -276,7 +272,7 @@ class WaveExp:
         """
         Initialise trial
         """
-        self.logger_main.debug("initialising trial")
+        self.logger_main.debug("initialising trial {}".format(self.trial_nr))
         trial = self.trials.get_stimulus(self.trial_nr)
         self.phase = 0
         # lists for saving the measured data
@@ -504,7 +500,7 @@ class Stimuli:
 
 
 if __name__ == "__main__":
-    exp = WaveExp(sj=99, condition="")
+    exp = WaveExp(sj=3, condition="")
     exp.setup()
     exp.run()
     exp.quit_exp()
