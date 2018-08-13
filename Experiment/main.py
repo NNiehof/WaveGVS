@@ -4,22 +4,22 @@ import multiprocessing
 from queue import Empty
 import json
 import time
-from collections import OrderedDict
 import numpy as np
+from collections import OrderedDict
 from psychopy import visual, core, event
 from Experiment.GVSHandler import GVSHandler
 from Experiment.loggingConfig import Listener, Worker
 from Experiment.RandStim import RandStim
+from Experiment.GenStim import GenStim
 
 """
-Present sinusoidal GVS with a visual line oscillating around the
-occipito-nasal axis at the same sine frequency. Participants can set the
-amplitude of the visual line to match their subjective visual vertical, so
-that they see the line as standing still and upright.
+Present constant (step) GVS with a visual line presented at a random start
+orientation. Participants can set the orientation of the visual line
+to match their subjective visual vertical, so that they see the line as upright.
 """
 
 
-class WaveExp:
+class StepExp:
 
     def __init__(self, sj=None, condition=""):
 
@@ -27,28 +27,22 @@ class WaveExp:
 
         # experiment settings and conditions
         self.sj = sj
-        self.paradigm = "waveGVS"
+        self.paradigm = "stepGVS"
         self.condition = condition
         self.f_sampling = 1e3
         self.screen_refresh_freq = 60
-        self.duration_s = 14.0
+        self.duration_s = 13.0
         self.visual_soa = None
         self.current_mA = 1.0
         self.physical_channel_name = "cDAQ1Mod1/ao0"
-        self.line_amplitude_step_size = 0.25
-        self.phase_step_size = 0.5
+        self.line_ori_step_size = 0.25
         self.oled_delay = 0.05
-        self.header = "trial_nr; current; frequency; line_offset; " \
-                      "line_ori; amplitude; phase\n"
-        self.phase = 0
+        self.header = "trial_nr; current; line_offset; line_ori\n"
+        self.ramp_duration_s = 1.5
 
         # longer practice trials
         if "practice" in self.condition:
             self.duration_s = 17.0
-        # task: adapt phase as well as amplitude
-        self.phase_shift = False
-        if "phaseshift" in self.condition:
-            self.phase_shift = True
 
         # initialise
         self.make_stim = None
@@ -56,12 +50,14 @@ class WaveExp:
         self.conditions = None
         self.trials = None
         self.triggers = None
-        self.gvs_wave = None
+        self.gvs_profile = None
         self.gvs_sent = None
-        self.visual_time = None
-        self.line_amplitude = 1.0
+        self.visual_duration = self.duration_s - (2 * self.ramp_duration_s)
+        self.visual_time = np.arange(0, self.visual_duration,
+                                     1.0 / self.screen_refresh_freq)
+        self.line_orientation = 0.0
         self.line_angle = None
-        self.visual_onset_delay = 0
+        self.visual_onset_delay = self.ramp_duration_s
         self.trial_nr = 0
 
         # root directory
@@ -102,6 +98,7 @@ class WaveExp:
         # create stimuli
         self.make_stim = Stimuli(self.win, self.settings_dir, self.n_trials)
         self.stimuli, self.triggers = self.make_stim.create()
+        self.gvs_create = GenStim(f_samp=self.f_sampling)
 
         # data save file
         self.save_data = SaveData(self.sj, self.paradigm, self.condition,
@@ -180,52 +177,16 @@ class WaveExp:
             if not blocking:
                 return None
 
-    def make_waves(self):
-        """
-        Make sine GVS signal and and antiphase sine visual line angle with
-        the current trial's parameters.
-        :return: gvs_wave, line_angle
-        """
-        self.gvs_time = np.arange(0, self.duration_s,
-                             1.0 / self.f_sampling)
-        gvs_wave = self.current_mA * np.sin(
-            2 * np.pi * self.frequency * self.gvs_time)
-        visual_duration = self.duration_s - (2 * self.visual_soa)
-        visual_time = np.arange(0, visual_duration,
-                                1.0 / self.screen_refresh_freq)
-        # visual_wave = self.line_amplitude * -np.sin(
-        #     2 * np.pi * self.frequency * visual_time)
-        return gvs_wave, visual_time
-
-    def next_line_orientation(self, t):
-        """
-        Calculate the next orientation of the visual line, with
-        amplitude and phase changed through key presses.
-        :param t: time sample
-        :return: next_orientation
-        """
-        next_ori = self.line_amplitude * -np.sin(
-            (2 * np.pi * self.frequency * t) - self.phase) + self.line_offset
-        return next_ori
-
     def check_response(self):
         """
         Check for key presses, update the visual line amplitude
         """
-        if self.phase_shift:
-            key_response = event.getKeys(keyList=[
-                "down", "up", "left", "right", "escape"])
-        else:
-            key_response = event.getKeys(keyList=["down", "up", "escape"])
+        key_response = event.getKeys(keyList=["left", "right", "escape"])
         if key_response:
-            if "down" in key_response:
-                self.line_amplitude -= self.line_amplitude_step_size
-            elif "up" in key_response:
-                self.line_amplitude += self.line_amplitude_step_size
-            elif "left" in key_response:
-                self.phase -= self.phase_step_size
+            if "left" in key_response:
+                self.line_orientation -= self.line_ori_step_size
             elif "right" in key_response:
-                self.phase += self.phase_step_size
+                self.line_orientation += self.line_ori_step_size
             elif "escape" in key_response:
                 self.quit_exp()
 
@@ -246,13 +207,9 @@ class WaveExp:
         line_start = time.time()
 
         for frame in self.visual_time:
-            # line_angle = (frame * self.line_amplitude) + self.line_offset
-            self.line_angle = self.next_line_orientation(frame)
-            self.stimuli["rodStim"].setOri(self.line_angle)
-            # save current line parameters in lists
-            self.line_ori.append(self.line_angle)
-            self.amplitudes.append(self.line_amplitude)
-            self.phases.append(self.phase)
+            self.stimuli["rodStim"].setOri(self.line_orientation)
+            # save current line orientation in list
+            self.line_ori.append(self.line_orientation)
             # show stimulus on screen
             self.display_stimuli()
             self.frame_times.append(time.time())
@@ -274,26 +231,26 @@ class WaveExp:
         """
         self.logger_main.debug("initialising trial {}".format(self.trial_nr))
         trial = self.trials.get_stimulus(self.trial_nr)
-        self.phase = 0
         # lists for saving the measured data
         self.line_ori = []
-        self.amplitudes = []
-        self.phases = []
         self.frame_times = []
 
         # trial parameters
         self.current_mA = trial[0]
-        self.frequency = trial[1]
-        self.line_offset = trial[2]
-        self.line_amplitude = trial[3]
+        self.line_offset = trial[1]
 
-        # stimulus asynchrony: start visual one period after GVS
-        self.visual_soa = 1.0 / self.frequency
+        # stimulus asynchrony: start visual after GVS has ramped up
+        self.visual_soa = self.ramp_duration_s
         self.visual_onset_delay = self.visual_soa - self.oled_delay
-        self.gvs_wave, self.visual_time = self.make_waves()
+
+        # create GVS profile
+        self.gvs_create.step(self.duration_s, self.current_mA)
+        self.gvs_create.fade(self.f_sampling * self.ramp_duration_s)
+        self.gvs_profile = self.gvs_create.stim
+
         # send GVS signal to handler
-        self.param_queue.put(self.gvs_wave)
-        self.logger_main.debug("wave sent to GVS handler")
+        self.param_queue.put(self.gvs_profile)
+        self.logger_main.debug("profile sent to GVS handler")
         # check whether the gvs profile was successfully created
         if self._check_gvs_status("stim_created"):
             self.logger_main.info("gvs current profile created")
@@ -318,9 +275,8 @@ class WaveExp:
                 self.quit_exp()
 
     def _format_data(self):
-        formatted_data = "{}; {}; {}; {}; {}; {}; {}\n".format(
-            self.trial_nr, self.current_mA, self.frequency, self.line_offset,
-            self.line_ori, self.amplitudes, self.phases)
+        formatted_data = "{}; {}; {}; {}\n".format(
+            self.trial_nr, self.current_mA, self.line_offset, self.line_ori)
         return formatted_data
 
     def run(self):
@@ -500,7 +456,7 @@ class Stimuli:
 
 
 if __name__ == "__main__":
-    exp = WaveExp(sj=3, condition="")
+    exp = StepExp(sj=99, condition="test")
     exp.setup()
     exp.run()
     exp.quit_exp()
