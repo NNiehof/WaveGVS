@@ -1,21 +1,8 @@
 {
 	"rodStim": {
-		"stimType": "Line",
+		"stimType": "ImageStim",
 		"settings": {
-			"start": [
-				0,
-				-200
-			],
-			"end": [
-				0,
-				200
-			],
-			"lineWidth": 6,
-			"lineColor": [
-				-0.84,
-				-0.84,
-				-0.84
-			]
+			"image": "longline.png"
 		}
 	},
 	"startText": {
