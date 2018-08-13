@@ -31,6 +31,17 @@ class GenStim(object):
         self.n_samp = int(duration * self.f_samp)
         self.stim = (2 * amp) * np.random.random(size=self.n_samp) - amp
 
+    def step(self, duration, amp):
+        """
+        Step stimulus (one constant value)
+
+        :param duration: signal duration (seconds)
+        :param amp: maximum signal amplitude
+        :return:
+        """
+        self.n_samp = int(duration * self.f_samp)
+        self.stim = amp * np.ones(self.n_samp)
+
     def sine(self, duration, amp, frequency):
         self.n_samp = int(duration * self.f_samp)
         t = np.arange(0, duration, 1.0 / self.f_samp)
