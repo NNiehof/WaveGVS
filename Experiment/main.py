@@ -238,6 +238,7 @@ class StepExp:
         # trial parameters
         self.current_mA = trial[0]
         self.line_offset = trial[1]
+        self.line_orientation = self.line_offset
 
         # stimulus asynchrony: start visual after GVS has ramped up
         self.visual_soa = self.ramp_duration_s
@@ -456,7 +457,7 @@ class Stimuli:
 
 
 if __name__ == "__main__":
-    exp = StepExp(sj=99, condition="test")
+    exp = StepExp(sj=99, condition="99")
     exp.setup()
     exp.run()
     exp.quit_exp()

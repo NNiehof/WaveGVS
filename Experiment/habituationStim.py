@@ -11,9 +11,10 @@ def habituation_signal():
     Generate a habituation signal with a slow ramp
     """
     amp = 2.0
-    duration = 25.0
+    duration = 13.0
     f_samp = 1e3
     frequency = 1.0
+    ramp_length = 1.5
     buffer_size = int(duration * f_samp)
     gvs = GVS(max_voltage=amp)
     timing = {"rate": f_samp, "samps_per_chan": buffer_size}
@@ -22,8 +23,12 @@ def habituation_signal():
     # step stimulus
     make_stim = GenStim(f_samp=f_samp)
     make_stim.step(duration, amp)
-    make_stim.fade(f_samp * 10.0)
+    make_stim.fade(f_samp * ramp_length)
     gvs_wave = make_stim.stim
+
+    # make_stim = GenStim(f_samp=f_samp)
+    # make_stim.sine(duration, amp, frequency)
+    # gvs_wave = make_stim.stim
 
     if connected:
         print("start galvanic stim")
